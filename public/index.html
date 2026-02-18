@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enerlux Call Center IA</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #1E3A5F 0%, #0F2744 100%);
+      min-height: 100vh;
+      color: white;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      margin-bottom: 30px;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .logo-icon {
+      width: 50px;
+      height: 50px;
+      background: #10B981;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    
+    .logo h1 {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    
+    .logo span {
+      color: #10B981;
+    }
+    
+    .status-badge {
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .status-badge.connected {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10B981;
+    }
+    
+    .status-badge.disconnected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #EF4444;
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: 300px 1fr 350px;
+      gap: 20px;
+    }
+    
+    .card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .card-title .count {
+      background: #10B981;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+    
+    /* Lista de clientes */
+    .client-list {
+      max-height: calc(100vh - 250px);
+      overflow-y: auto;
+    }
+    
+    .client-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      background: rgba(255,255,255,0.03);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .client-item:hover {
+      background: rgba(255,255,255,0.08);
+    }
+    
+    .client-item.active {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10B981;
+    }
+    
+    .client-info h4 {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .client-info p {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+    }
+    
+    .client-status {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    
+    .client-status.pendiente { background: rgba(251, 191, 36, 0.2); color: #FBBF24; }
+    .client-status.llamando { background: rgba(59, 130, 246, 0.2); color: #3B82F6; animation: pulse 1s infinite; }
+    .client-status.interesado { background: rgba(16, 185, 129, 0.2); color: #10B981; }
+    .client-status.no-interesado { background: rgba(239, 68, 68, 0.2); color: #EF4444; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    
+    /* Panel de llamada */
+    .call-panel {
+      text-align: center;
+    }
+    
+    .current-client {
+      background: rgba(255,255,255,0.1);
+      padding: 30px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+    }
+    
+    .current-client h2 {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    
+    .current-client p {
+      color: rgba(255,255,255,0.6);
+      font-size: 18px;
+    }
+    
+    .call-actions {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      margin-bottom: 30px;
+    }
+    
+    .btn {
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary {
+      background: #10B981;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background: #059669;
+    }
+    
+    .btn-danger {
+      background: #EF4444;
+      color: white;
+    }
+    
+    .btn-danger:hover {
+      background: #DC2626;
+    }
+    
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* Guiones */
+    .scripts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+    }
+    
+    .script-btn {
+      padding: 12px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .script-btn:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    
+    /* Conversación */
+    .conversation {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    
+    .message {
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 10px;
+      max-width: 80%;
+    }
+    
+    .message.agent {
+      background: #10B981;
+      margin-right: auto;
+    }
+    
+    .message.client {
+      background: rgba(255,255,255,0.1);
+      margin-left: auto;
+    }
+    
+    .message-time {
+      font-size: 11px;
+      opacity: 0.6;
+      margin-top: 5px;
+    }
+    
+    /* Input */
+    .input-area {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    
+    .input-area input {
+      flex: 1;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.05);
+      color: white;
+      font-size: 14px;
+    }
+    
+    .input-area input::placeholder {
+      color: rgba(255,255,255,0.4);
+    }
+    
+    .input-area button {
+      padding: 12px 20px;
+    }
+    
+    /* Upload */
+    .upload-area {
+      border: 2px dashed rgba(255,255,255,0.2);
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .upload-area:hover {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+    
+    .upload-area p {
+      color: rgba(255,255,255,0.6);
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    
+    /* Responsive */
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <div class="logo-icon">📞</div>
+        <h1>Enerlux <span>Call Center IA</span></h1>
+      </div>
+      <div id="status" class="status-badge disconnected">Desconectado</div>
+    </header>
+    
+    <div class="grid">
+      <!-- Lista de clientes -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            👥 Clientes
+            <span id="client-count" class="count">0</span>
+          </div>
+        </div>
+        
+        <div class="upload-area" id="upload-area">
+          <span style="font-size: 40px;">📄</span>
+          <p>Arrastra un CSV o haz clic para cargar</p>
+          <input type="file" id="file-input" accept=".csv,.json" style="display: none;">
+        </div>
+        
+        <div class="client-list" id="client-list">
+          <p style="color: rgba(255,255,255,0.4); text-align: center; padding: 20px;">
+            Carga una lista de clientes para empezar
+          </p>
+        </div>
+      </div>
+      
+      <!-- Panel de llamada -->
+      <div class="card call-panel">
+        <div class="card-header">
+          <div class="card-title">📞 Llamada Actual</div>
+        </div>
+        
+        <div class="current-client" id="current-client">
+          <h2>Sin llamada activa</h2>
+          <p>Selecciona un cliente de la lista</p>
+        </div>
+        
+        <div class="call-actions">
+          <button class="btn btn-primary" id="btn-call" disabled>
+            📞 Llamar
+          </button>
+          <button class="btn btn-primary" id="btn-next" disabled>
+            ⏭️ Siguiente
+          </button>
+          <button class="btn btn-danger" id="btn-end" disabled>
+            ❌ Finalizar
+          </button>
+        </div>
+        
+        <div class="scripts">
+          <button class="script-btn" data-script="bienvenida">👋 Saludo inicial</button>
+          <button class="script-btn" data-script="oferta">💡 Explicar oferta</button>
+          <button class="script-btn" data-script="cierre">✅ Pedir datos</button>
+          <button class="script-btn" data-script="despedida">👋 Despedida</button>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: rgba(255,255,255,0.05); border-radius: 10px;">
+          <p style="font-size: 13px; color: rgba(255,255,255,0.6);">
+            💡 <strong>Tip:</strong> Conecta VB-CABLE en Zadarma para que la IA escuche y hable
+          </p>
+        </div>
+      </div>
+      
+      <!-- Conversación -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">💬 Conversación</div>
+        </div>
+        
+        <div class="conversation" id="conversation">
+          <p style="color: rgba(255,255,255,0.4); text-align: center; padding: 40px;">
+            La conversación aparecerá aquí durante la llamada
+          </p>
+        </div>
+        
+        <div class="input-area">
+          <input type="text" id="message-input" placeholder="Escribe lo que dice el cliente...">
+          <button class="btn btn-primary" id="btn-send">Enviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Estado
+    let ws = null;
+    let clientes = [];
+    let clienteActual = null;
+    let conversacion = [];
+    
+    // Elementos
+    const statusEl = document.getElementById('status');
+    const clientListEl = document.getElementById('client-list');
+    const clientCountEl = document.getElementById('client-count');
+    const currentClientEl = document.getElementById('current-client');
+    const conversationEl = document.getElementById('conversation');
+    const messageInput = document.getElementById('message-input');
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    
+    // Botones
+    const btnCall = document.getElementById('btn-call');
+    const btnNext = document.getElementById('btn-next');
+    const btnEnd = document.getElementById('btn-end');
+    const btnSend = document.getElementById('btn-send');
+    
+    // Conectar WebSocket
+    function connect() {
+      ws = new WebSocket(`ws://${window.location.host}`);
+      
+      ws.onopen = () => {
+        statusEl.textContent = 'Conectado';
+        statusEl.className = 'status-badge connected';
+      };
+      
+      ws.onclose = () => {
+        statusEl.textContent = 'Desconectado';
+        statusEl.className = 'status-badge disconnected';
+        setTimeout(connect, 2000);
+      };
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleWSMessage(data);
+      };
+    }
+    
+    // Manejar mensajes del servidor
+    function handleWSMessage(data) {
+      switch (data.type) {
+        case 'estado':
+          clientes = data.data.clientes || [];
+          renderClientes();
+          break;
+          
+        case 'llamada_iniciada':
+          clienteActual = data.cliente;
+          actualizarClienteActual();
+          addMessage('agent', `Llamando a ${data.cliente.nombre}...`);
+          break;
+          
+        case 'llamada_finalizada':
+          addMessage('agent', `Llamada finalizada: ${data.resultado}`);
+          clienteActual = null;
+          actualizarClienteActual();
+          break;
+          
+        case 'respuesta':
+          addMessage('agent', data.texto);
+          break;
+          
+        case 'guion':
+          addMessage('agent', data.texto);
+          break;
+      }
+    }
+    
+    // Renderizar lista de clientes
+    function renderClientes() {
+      if (clientes.length === 0) {
+        clientListEl.innerHTML = '<p style="color: rgba(255,255,255,0.4); text-align: center; padding: 20px;">Carga una lista de clientes para empezar</p>';
+        clientCountEl.textContent = '0';
+        return;
+      }
+      
+      clientCountEl.textContent = clientes.length;
+      
+      clientListEl.innerHTML = clientes.map((c, i) => `
+        <div class="client-item ${clienteActual && clienteActual.telefono === c.telefono ? 'active' : ''}" data-index="${i}">
+          <div class="client-info">
+            <h4>${c.nombre || 'Sin nombre'}</h4>
+            <p>${c.telefono}</p>
+          </div>
+          <span class="client-status ${c.estado || 'pendiente'}">${c.estado || 'Pendiente'}</span>
+        </div>
+      `).join('');
+      
+      // Añadir eventos
+      document.querySelectorAll('.client-item').forEach(item => {
+        item.addEventListener('click', () => selectCliente(parseInt(item.dataset.index)));
+      });
+    }
+    
+    // Seleccionar cliente
+    function selectCliente(index) {
+      clienteActual = clientes[index];
+      actualizarClienteActual();
+      btnCall.disabled = false;
+    }
+    
+    // Actualizar panel de cliente actual
+    function actualizarClienteActual() {
+      if (clienteActual) {
+        currentClientEl.innerHTML = `
+          <h2>${clienteActual.nombre || 'Cliente'}</h2>
+          <p>📞 ${clienteActual.telefono}</p>
+          <p style="margin-top: 10px; font-size: 14px; color: rgba(255,255,255,0.4);">
+            ${clienteActual.direccion || ''} ${clienteActual.notas ? '| ' + clienteActual.notas : ''}
+          </p>
+        `;
+        btnCall.disabled = false;
+        btnEnd.disabled = false;
+      } else {
+        currentClientEl.innerHTML = '<h2>Sin llamada activa</h2><p>Selecciona un cliente de la lista</p>';
+        btnCall.disabled = true;
+        btnEnd.disabled = true;
+      }
+    }
+    
+    // Añadir mensaje a la conversación
+    function addMessage(tipo, texto) {
+      conversacion.push({ tipo, texto, time: new Date() });
+      
+      conversationEl.innerHTML = conversacion.map(m => `
+        <div class="message ${m.tipo}">
+          ${m.texto}
+          <div class="message-time">${m.time.toLocaleTimeString()}</div>
+        </div>
+      `).join('');
+      
+      conversationEl.scrollTop = conversationEl.scrollHeight;
+    }
+    
+    // Enviar mensaje
+    function sendMessage() {
+      const texto = messageInput.value.trim();
+      if (!texto) return;
+      
+      addMessage('client', texto);
+      messageInput.value = '';
+      
+      fetch('/api/responder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto })
+      });
+    }
+    
+    // Cargar archivo
+    function handleFile(file) {
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        let clientes = [];
+        
+        if (file.name.endsWith('.json')) {
+          clientes = JSON.parse(e.target.result);
+        } else {
+          // CSV
+          const lines = e.target.result.split('\n');
+          const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+          
+          for (let i = 1; i < lines.length; i++) {
+            if (!lines[i].trim()) continue;
+            const values = lines[i].split(',');
+            const cliente = {};
+            headers.forEach((h, j) => {
+              cliente[h] = values[j]?.trim();
+            });
+            clientes.push(cliente);
+          }
+        }
+        
+        // Enviar al servidor
+        const res = await fetch('/api/clientes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientes })
+        });
+        
+        const data = await res.json();
+        alert(data.message);
+        
+        // Recargar lista
+        fetch('/api/estado').then(r => r.json()).then(estado => {
+          clientes = estado.clientes;
+          renderClientes();
+        });
+      };
+      
+      reader.readAsText(file);
+    }
+    
+    // Eventos
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.borderColor = '#10B981'; });
+    uploadArea.addEventListener('dragleave', () => uploadArea.style.borderColor = 'rgba(255,255,255,0.2)');
+    uploadArea.addEventListener('drop', (e) => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); });
+    
+    btnCall.addEventListener('click', async () => {
+      if (!clienteActual) return;
+      const index = clientes.findIndex(c => c.telefono === clienteActual.telefono);
+      
+      const res = await fetch(`/api/llamar/${index}`, { method: 'POST' });
+      const data = await res.json();
+      console.log(data);
+    });
+    
+    btnNext.addEventListener('click', async () => {
+      const res = await fetch('/api/siguiente');
+      const data = await res.json();
+      if (data.cliente) {
+        clienteActual = data.cliente;
+        actualizarClienteActual();
+      } else {
+        alert('No hay más clientes pendientes');
+      }
+    });
+    
+    btnEnd.addEventListener('click', async () => {
+      const resultado = prompt('Resultado de la llamada:', 'interesado');
+      if (!resultado) return;
+      
+      const res = await fetch('/api/finalizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultado })
+      });
+      
+      conversacion = [];
+      conversationEl.innerHTML = '<p style="color: rgba(255,255,255,0.4); text-align: center; padding: 40px;">La conversación aparecerá aquí durante la llamada</p>';
+    });
+    
+    btnSend.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+    
+    document.querySelectorAll('.script-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const script = btn.dataset.script;
+        fetch(`/api/guion/${script}`, { method: 'POST' });
+      });
+    });
+    
+    // Iniciar
+    connect();
+  </script>
+</body>
+</html>
