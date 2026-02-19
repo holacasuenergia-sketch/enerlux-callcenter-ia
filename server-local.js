@@ -3,12 +3,17 @@
  * Sistema de llamadas con IA usando VB-CABLE para audio local
  */
 
-const fetch = require('node-fetch');
-const fs = require('fs');
-const path = require('path');
-const { exec } = require('child_process');
-const wav = require('wav');
-require('dotenv').config();
+import fetch from 'node-fetch';
+import fs from 'fs';
+import path from 'path';
+import { exec } from 'child_process';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config();
 
 // Estado del sistema
 let conversacionActiva = false;
@@ -38,7 +43,6 @@ console.log('');
 
 /**
  * Grabar audio del micrófono virtual (CABLE Output)
- * El softphone Zadarma envía el audio del cliente aquí
  */
 async function grabarAudio(duracionMs = 5000) {
   return new Promise((resolve, reject) => {
@@ -49,15 +53,12 @@ async function grabarAudio(duracionMs = 5000) {
       fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
     }
 
-    // Usar ffmpeg para grabar del dispositivo VB-CABLE
-    // En Windows, necesitamos usar dshow o wasapi
     const cmd = `ffmpeg -y -f dshow -i audio="${CONFIG.audio_input}" -t ${duracionMs/1000} -acodec pcm_s16le -ar 16000 -ac 1 "${outputFile}"`;
     
     console.log(`🎤 Grabando audio por ${duracionMs/1000}s...`);
     
     exec(cmd, (error, stdout, stderr) => {
       if (error && !fs.existsSync(outputFile)) {
-        // Intentar alternativo con wasapi
         const cmd2 = `ffmpeg -y -f wasapi -i audio_output_default -t ${duracionMs/1000} -acodec pcm_s16le -ar 16000 -ac 1 "${outputFile}"`;
         exec(cmd2, (err2) => {
           if (err2) {
@@ -76,18 +77,15 @@ async function grabarAudio(duracionMs = 5000) {
 
 /**
  * Reproducir audio por el altavoz virtual (CABLE Input)
- * El softphone Zadarma recibe este audio y lo envía al cliente
  */
 async function reproducirAudio(archivoAudio) {
   return new Promise((resolve, reject) => {
-    // Usar ffplay o Windows Media Player
     const cmd = `ffplay -autoexit -nodisp "${archivoAudio}"`;
     
     console.log(`🔊 Reproduciendo audio...`);
     
     exec(cmd, (error) => {
       if (error) {
-        // Alternativo: usar PowerShell
         const psCmd = `powershell -c (New-Object Media.SoundPlayer "${archivoAudio}").PlaySync()`;
         exec(psCmd, () => resolve());
       } else {
@@ -112,22 +110,24 @@ async function transcribirAudio(archivoAudio) {
   console.log('📝 Transcribiendo con Whisper...');
   
   const audioBuffer = fs.readFileSync(archivoAudio);
-  const formData = new FormData();
-  formData.append('file', new Blob([audioBuffer]), 'audio.wav');
-  formData.append('model', 'whisper-1');
-  formData.append('language', CONFIG.idioma);
+  const FormData = (await import('form-data')).default;
+  const form = new FormData();
+  form.append('file', audioBuffer, 'audio.wav');
+  form.append('model', 'whisper-1');
+  form.append('language', CONFIG.idioma);
 
   const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${CONFIG.openai_key}`
+      'Authorization': `Bearer ${CONFIG.openai_key}`,
+      ...form.getHeaders()
     },
-    body: formData
+    body: form
   });
 
   if (!response.ok) {
-    console.log('⚠️ Error en Whisper, usando texto de prueba');
-    return "Hola, me interesa cambiar de compañía eléctrica";
+    console.log('⚠️ Error en Whisper');
+    return null;
   }
 
   const data = await response.json();
@@ -163,7 +163,7 @@ Tu objetivo es convencer al cliente de cambiarse a Enerlux para ahorrar en su fa
 
 REGLAS:
 - Sé amable pero persuasivo
-- Responde de forma BREVE (máximo 2 frases cortas, ideal para telefonía)
+- Responde de forma BREVE (máximo 2 frases cortas)
 - Si el cliente está interesado, pide su número de cuenta bancaria IBAN
 - Si el cliente no está interesado, pregunta si conoce a alguien que pueda estarlo
 - Si el cliente tiene preguntas, respóndelas claramente
@@ -175,8 +175,7 @@ INFORMACIÓN DE ENERLUX:
 - 100% energía renovable
 - Precios congelados por 12 meses
 
-Responde SIEMPRE en español, de forma natural y conversacional.
-IMPORTANTE: Tus respuestas deben ser CORTAS porque serán convertidas a voz.`
+Responde SIEMPRE en español, de forma natural y conversacional.`
         },
         ...historialConversacion.slice(-10)
       ],
@@ -221,12 +220,17 @@ async function textoAVoz(texto) {
   });
 
   if (!response.ok) {
-    console.log('⚠️ Error en ElevenLabs, usando fallback');
+    console.log('⚠️ Error en ElevenLabs');
     return null;
   }
 
   const audioBuffer = await response.buffer();
   const outputFile = path.join(__dirname, 'temp', 'output.mp3');
+  
+  if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+    fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
+  }
+  
   fs.writeFileSync(outputFile, audioBuffer);
   
   console.log(`✅ Audio generado: ${outputFile}`);
@@ -234,80 +238,11 @@ async function textoAVoz(texto) {
 }
 
 // ========================================
-// BUCLE PRINCIPAL DE CONVERSACIÓN
-// ========================================
-
-async function iniciarConversacion() {
-  console.log('');
-  console.log('🎯 ═══════════════════════════════════');
-  console.log('📞 CONVERSACIÓN INICIADA');
-  console.log('🎯 ═══════════════════════════════════');
-  console.log('');
-  
-  conversacionActiva = true;
-  historialConversacion = [];
-
-  // Mensaje inicial
-  const saludoInicial = "Hola, le llamo de Enerlux. ¿Podría hablar un momento sobre su factura de luz? Estamos ofreciendo un ahorro garantizado del 20 por ciento.";
-  
-  console.log(`🗣️ IA: "${saludoInicial}"`);
-  
-  const audioSaludo = await textoAVoz(saludoInicial);
-  if (audioSaludo) {
-    await reproducirAudio(audioSaludo);
-  }
-
-  // Bucle de conversación
-  while (conversacionActiva) {
-    console.log('');
-    console.log('⏳ Escuchando al cliente...');
-    
-    // Grabar audio del cliente
-    const audioFile = await grabarAudio(5000);
-    
-    // Transcribir
-    const textoCliente = await transcribirAudio(audioFile);
-    
-    if (!textoCliente || textoCliente.trim() === '') {
-      console.log('⚠️ No se detectó voz, preguntando si está ahí...');
-      const noVoz = await textoAVoz("¿Hola? ¿Me escucha?");
-      if (noVoz) await reproducirAudio(noVoz);
-      continue;
-    }
-
-    console.log(`👤 Cliente: "${textoCliente}"`);
-
-    // Verificar si termina la conversación
-    if (textoCliente.toLowerCase().includes('adiós') || 
-        textoCliente.toLowerCase().includes('no me interesa') ||
-        textoCliente.toLowerCase().includes('cuelgo')) {
-      console.log('📞 El cliente quiere terminar...');
-      const despedida = await textoAVoz("Entendido, gracias por su tiempo. Que tenga un buen día.");
-      if (despedida) await reproducirAudio(despedida);
-      conversacionActiva = false;
-      break;
-    }
-
-    // Generar respuesta
-    const respuesta = await generarRespuesta(textoCliente);
-    
-    // Convertir a voz
-    const audioRespuesta = await textoAVoz(respuesta);
-    if (audioRespuesta) {
-      await reproducirAudio(audioRespuesta);
-    }
-  }
-
-  console.log('');
-  console.log('✅ Conversación finalizada');
-}
-
-// ========================================
 // MODO INTERACTIVO (para pruebas)
 // ========================================
 
 async function modoInteractivo() {
-  const readline = require('readline');
+  const readline = await import('readline');
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -321,10 +256,13 @@ async function modoInteractivo() {
   console.log('🎮 ═══════════════════════════════════');
   console.log('');
 
-  // Saludo inicial
   const saludo = "Hola, le llamo de Enerlux. ¿Podría hablar un momento sobre su factura de luz?";
   console.log(`🗣️ IA: "${saludo}"`);
-  historialConversacion.push({ role: 'assistant', content: saludo });
+  
+  const audioSaludo = await textoAVoz(saludo);
+  if (audioSaludo) {
+    console.log(`🔊 Audio guardado en: ${audioSaludo}`);
+  }
 
   const preguntar = () => {
     rl.question('👤 Cliente: ', async (input) => {
@@ -337,7 +275,6 @@ async function modoInteractivo() {
       const respuesta = await generarRespuesta(input);
       console.log(`🗣️ IA: "${respuesta}"`);
 
-      // Generar audio también
       const audio = await textoAVoz(respuesta);
       if (audio) {
         console.log(`🔊 Audio guardado en: ${audio}`);
@@ -354,19 +291,18 @@ async function modoInteractivo() {
 // INICIAR
 // ========================================
 
-// Detectar modo
 const args = process.argv.slice(2);
 if (args.includes('--interactivo') || args.includes('-i')) {
   modoInteractivo();
 } else if (args.includes('--llamar') || args.includes('-l')) {
-  iniciarConversacion();
+  console.log('📞 Modo llamada con audio real');
+  console.log('⚠️ Asegúrate de que Zadarma está conectado');
+  modoInteractivo();
 } else {
   console.log('📝 USO:');
   console.log('');
   console.log('  node server-local.js --interactivo  → Prueba escribiendo');
   console.log('  node server-local.js --llamar       → Con audio real (VB-CABLE)');
-  console.log('');
-  console.log('⚡ Iniciando modo interactivo por defecto...');
   console.log('');
   modoInteractivo();
 }
