@@ -19,6 +19,7 @@ dotenv.config();
 // Estado del sistema
 let conversacionActiva = false;
 let historialConversacion = [];
+let clienteActual = null;
 
 // Configuración
 const CONFIG = {
@@ -38,6 +39,59 @@ console.log(`🎧 Audio Output: ${CONFIG.audio_output}`);
 console.log('');
 
 // ========================================
+// LEER CSV DE CLIENTES
+// ========================================
+
+function parseCSV(csvPath) {
+  const content = fs.readFileSync(csvPath, 'utf-8');
+  const lines = content.trim().split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  
+  const clientes = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim());
+    const cliente = {};
+    headers.forEach((header, idx) => {
+      cliente[header] = values[idx] || '';
+    });
+    if (cliente.nombre || cliente.telefono) {
+      clientes.push(cliente);
+    }
+  }
+  
+  return clientes;
+}
+
+function mostrarCliente(cliente) {
+  console.log('\n📋 ═══════════════════════════════════');
+  console.log('📋 DATOS DEL CLIENTE:');
+  console.log(`📋 Nombre: ${cliente.nombre || 'N/A'}`);
+  console.log(`📋 Dirección: ${cliente.direccion || cliente.dirección || 'N/A'}`);
+  console.log(`📋 Código Postal: ${cliente.codigo_postal || cliente.codigopostal || cliente.cp || 'N/A'}`);
+  console.log(`📋 Teléfono: ${cliente.telefono || cliente.tel || 'N/A'}`);
+  console.log(`📋 Email: ${cliente.email || cliente.mail || cliente.correo || 'N/A'}`);
+  console.log(`📋 IBAN: ${cliente.iban ? cliente.iban.slice(-4).padStart(cliente.iban.length, '*') : 'N/A'}`);
+  console.log(`📋 DNI: ${cliente.dni ? cliente.dni.slice(-2).padStart(cliente.dni.length, '*') : 'N/A'}`);
+  console.log('📋 ═══════════════════════════════════\n');
+}
+
+function generarPromptCliente(cliente) {
+  if (!cliente) return '';
+  
+  const datos = [];
+  if (cliente.nombre) datos.push(`NOMBRE: ${cliente.nombre}`);
+  if (cliente.direccion || cliente.dirección) datos.push(`DIRECCIÓN: ${cliente.direccion || cliente.dirección}`);
+  if (cliente.codigo_postal || cliente.codigopostal || cliente.cp) datos.push(`CÓDIGO POSTAL: ${cliente.codigo_postal || cliente.codigopostal || cliente.cp}`);
+  if (cliente.telefono || cliente.tel) datos.push(`TELÉFONO: ${cliente.telefono || cliente.tel}`);
+  if (cliente.email || cliente.mail || cliente.correo) datos.push(`EMAIL: ${cliente.email || cliente.mail || cliente.correo}`);
+  if (cliente.iban) datos.push(`IBAN: ****${cliente.iban.slice(-4)}`);
+  if (cliente.dni) datos.push(`DNI: ******${cliente.dni.slice(-2)}`);
+  
+  return `\n\nDATOS DEL CLIENTE ACTUAL (úsalos en la conversación):
+${datos.join('\n')}`;
+}
+
+// ========================================
 // GROQ API (GRATIS - LLaMA/Mixtral)
 // ========================================
 
@@ -49,12 +103,12 @@ async function generarRespuestaGroq(mensajeUsuario) {
 
   console.log('🤖 Generando respuesta con Groq (LLaMA 3.1)...');
 
-  const messages = [
-    {
-      role: 'system',
-      content: `Eres un agente telefónico de Enerlux Soluciones, empresa de cambio de compañía eléctrica en España.
+  const systemPrompt = `Eres un agente telefónico de Enerlux Soluciones, una ASESORÍA ENERGÉTICA en España.
+
+IMPORTANTE: Enerlux NO es una comercializadora. Es una asesoria que evalúa las distintas compañías (Endesa, Naturgy, Iberdrola, Gana Energía, etc.) y encuentra el mejor precio para el cliente según su zona.
 
 TU NOMBRE: José (usalo para presentarte)
+${generarPromptCliente(clienteActual)}
 
 SPEECH OFICIAL (síguelo pero de forma natural):
 
@@ -68,11 +122,11 @@ SPEECH OFICIAL (síguelo pero de forma natural):
 "¿Actualmente con qué compañía se encuentra?"
 
 4. OFERTA POR ZONA:
-"Correcto, por código postal de su zona [PROVINCIA], le brindamos el precio de 0,10€/kWh. Vamos a corregir esta incidencia con la otra compañía y bajarle el precio de los 0,15€ que tiene ahora. Así deja de pagar ese 36% de más."
+"Correcto, por código postal [CÓDIGO POSTAL] de su zona, hemos evaluado las compañías disponibles (Endesa, Naturgy, Iberdrola, Gana Energía) y le brindamos el mejor precio: 0,10€/kWh. Vamos a corregir esta incidencia y bajarle el precio de los 0,15€ que tiene ahora. Así deja de pagar ese 36% de más."
 
 5. CONFIRMACIÓN DE DATOS:
 "Es un minuto para dejarlo listo. No le pediré datos ya que nos corresponde saberlo por la compañía."
-Confirmar: Nombre completo, correo, teléfono, dirección, IBAN (últimos 2 dígitos), DNI (últimos 2 dígitos).
+Confirmar: Nombre completo, correo, teléfono, dirección, IBAN (últimos 4 dígitos), DNI (últimos 2 dígitos).
 Preguntar: "¿Desea su facturación en papel o por email?"
 
 6. CIERRE:
@@ -83,11 +137,14 @@ Preguntar: "¿Desea su facturación en papel o por email?"
 
 REGLAS:
 - Responde BREVE (máximo 2-3 frases)
-- Si el cliente pregunta por datos personales, explica que ya los tienen de la compañía
+- Enerlux es ASESORÍA, no comercializadora - evaluamos compañías para encontrar el mejor precio
+- Si el cliente pregunta por datos personales, confirma los que ya tienes
 - Si el cliente está interesado, pasa a confirmar datos
 - Si el cliente rechaza, pregunta si conoce a alguien interesado
-- Siempre en español, natural y conversacional`
-    },
+- Siempre en español, natural y conversacional`;
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
     ...historialConversacion
   ];
 
@@ -101,7 +158,7 @@ REGLAS:
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
         messages: messages,
-        max_tokens: 100,
+        max_tokens: 150,
         temperature: 0.7
       })
     });
@@ -146,21 +203,12 @@ async function textoAVozEdge(texto) {
     exec(cmd, (error) => {
       if (error) {
         console.log('⚠️ Error Edge TTS, fallback a reproducir directo...');
-        // Reproducir sin guardar archivo
         exec(`edge-tts --text "${texto.replace(/"/g, '\\"')}" --voice es-ES-ElviraNeural | ffplay -autoexit -nodisp -i pipe:0`, () => resolve(null));
       } else {
         console.log(`✅ Audio generado: ${outputFile}`);
         resolve(outputFile);
       }
     });
-  });
-}
-
-// Alternativa con SAPI (Windows)
-async function textoAVozSAPI(texto) {
-  const textoEscapado = texto.replace(/'/g, "''");
-  return new Promise((resolve) => {
-    exec(`powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak('${textoEscapado}')"`, () => resolve());
   });
 }
 
@@ -191,12 +239,18 @@ async function modoInteractivo() {
     return;
   }
 
-  const saludo = "Hola, buenos días. Le llamo del Departamento de Incidencias de Enerlux Soluciones. ¿Podría hablar un momento sobre su suministro de luz?";
-  console.log(`🗣️ IA: "${saludo}"`);
-  
-  const audioSaludo = await textoAVozEdge(saludo);
-  if (audioSaludo) {
-    console.log(`🔊 Audio guardado en: ${audioSaludo}`);
+  // Mostrar datos del cliente si hay
+  if (clienteActual) {
+    mostrarCliente(clienteActual);
+    const saludo = `Hola, buenos días. ¿Hablo con ${clienteActual.nombre || 'usted'}? Le llamo del Departamento de Incidencias de Enerlux Soluciones por su suministro en ${clienteActual.direccion || clienteActual.dirección || 'su dirección'}.`;
+    console.log(`🗣️ IA: "${saludo}"`);
+    const audioSaludo = await textoAVozEdge(saludo);
+    if (audioSaludo) console.log(`🔊 Audio guardado en: ${audioSaludo}`);
+  } else {
+    const saludo = "Hola, buenos días. Le llamo del Departamento de Incidencias de Enerlux Soluciones. ¿Podría hablar un momento sobre su suministro de luz?";
+    console.log(`🗣️ IA: "${saludo}"`);
+    const audioSaludo = await textoAVozEdge(saludo);
+    if (audioSaludo) console.log(`🔊 Audio guardado en: ${audioSaludo}`);
   }
 
   const preguntar = () => {
@@ -216,9 +270,7 @@ async function modoInteractivo() {
       console.log(`🗣️ IA: "${respuesta}"`);
 
       const audio = await textoAVozEdge(respuesta);
-      if (audio) {
-        console.log(`🔊 Audio guardado en: ${audio}`);
-      }
+      if (audio) console.log(`🔊 Audio guardado en: ${audio}`);
 
       preguntar();
     });
@@ -228,19 +280,67 @@ async function modoInteractivo() {
 }
 
 // ========================================
+// MODO LLAMADAS DESDE CSV
+// ========================================
+
+async function modoCSV(csvPath) {
+  if (!fs.existsSync(csvPath)) {
+    console.log(`❌ ERROR: No existe el archivo ${csvPath}`);
+    return;
+  }
+
+  const clientes = parseCSV(csvPath);
+  console.log(`📋 Cargados ${clientes.length} clientes del CSV\n`);
+
+  if (clientes.length === 0) {
+    console.log('❌ No se encontraron clientes en el CSV');
+    return;
+  }
+
+  console.log('📋 Lista de clientes:');
+  clientes.forEach((c, i) => {
+    console.log(`  ${i + 1}. ${c.nombre || 'Sin nombre'} - ${c.telefono || c.tel || 'Sin teléfono'}`);
+  });
+  console.log('');
+
+  modoInteractivo();
+}
+
+// ========================================
 // INICIAR
 // ========================================
 
 const args = process.argv.slice(2);
-if (args.includes('--interactivo') || args.includes('-i')) {
+const csvIndex = args.findIndex(a => a === '--csv' || a === '-c');
+
+if (csvIndex !== -1 && args[csvIndex + 1]) {
+  const csvPath = args[csvIndex + 1];
+  modoCSV(csvPath);
+} else if (args.includes('--interactivo') || args.includes('-i')) {
   modoInteractivo();
 } else if (args.includes('--llamar') || args.includes('-l')) {
   console.log('📞 Modo llamada con audio real');
   modoInteractivo();
+} else if (args.includes('--help') || args.includes('-h')) {
+  console.log('📝 USO:');
+  console.log('');
+  console.log('  node server-local.js --interactivo       → Prueba escribiendo (sin cliente)');
+  console.log('  node server-local.js --csv clientes.csv  → Cargar clientes del CSV');
+  console.log('  node server-local.js --llamar            → Con audio real (VB-CABLE)');
+  console.log('');
+  console.log('📋 FORMATO CSV:');
+  console.log('  nombre,direccion,codigo_postal,telefono,email,iban,dni');
+  console.log('  Juan García,Calle Mayor 1,28001,666123456,juan@email.com,ES12345678,12345678A');
+  console.log('');
+  console.log('🔑 CONFIGURACIÓN:');
+  console.log('  Crear archivo .env con:');
+  console.log('  GROQ_API_KEY=tu_api_key ( gratis en: https://console.groq.com )');
+  console.log('');
 } else {
   console.log('📝 USO:');
-  console.log('  node server-local.js --interactivo  → Prueba escribiendo');
-  console.log('  node server-local.js --llamar       → Con audio real');
+  console.log('  node server-local.js --interactivo       → Prueba escribiendo');
+  console.log('  node server-local.js --csv clientes.csv  → Cargar clientes del CSV');
+  console.log('  node server-local.js --help              → Ver ayuda completa');
   console.log('');
   modoInteractivo();
 }
