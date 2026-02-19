@@ -1,6 +1,7 @@
 /**
  * ENERLUX CALL CENTER IA - SERVIDOR LOCAL (VB-CABLE + ZADARMA)
- * Sistema de llamadas con IA usando VB-CABLE para audio local
+ * Sistema de llamadas con IA - versión GRATUITA
+ * Usa: Gemini (gratis) + Edge TTS (gratis)
  */
 
 import fetch from 'node-fetch';
@@ -21,18 +22,17 @@ let historialConversacion = [];
 
 // Configuración
 const CONFIG = {
-  openai_key: process.env.OPENAI_API_KEY,
-  elevenlabs_key: process.env.ELEVENLABS_API_KEY,
-  elevenlabs_voice_id: '21m00Tcm4TlvDq8ikWAM', // Rachel - voz natural
-  audio_input: 'CABLE Output (VB-Audio Virtual Cable)', // Micrófono virtual
-  audio_output: 'CABLE Input (VB-Audio Virtual Cable)', // Altavoz virtual
+  gemini_key: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
+  use_edge_tts: true, // Edge TTS es gratis
+  audio_input: 'CABLE Output (VB-Audio Virtual Cable)',
+  audio_output: 'CABLE Input (VB-Audio Virtual Cable)',
   idioma: 'es'
 };
 
-console.log('📞 ENERLUX CALL CENTER IA - Servidor Local');
-console.log('==========================================');
-console.log(`🔑 OpenAI: ${CONFIG.openai_key ? '✅ Configurado' : '❌ Falta'}`);
-console.log(`🔑 ElevenLabs: ${CONFIG.elevenlabs_key ? '✅ Configurado' : '❌ Falta'}`);
+console.log('📞 ENERLUX CALL CENTER IA - Servidor Local (GRATIS)');
+console.log('===================================================');
+console.log(`🔑 Gemini: ${CONFIG.gemini_key ? '✅ Configurado' : '❌ Falta API key'}`);
+console.log(`🔊 Voz: Edge TTS (Microsoft - Gratis)`);
 console.log(`🎧 Audio Input: ${CONFIG.audio_input}`);
 console.log(`🎧 Audio Output: ${CONFIG.audio_output}`);
 console.log('');
@@ -41,14 +41,10 @@ console.log('');
 // FUNCIONES DE AUDIO
 // ========================================
 
-/**
- * Grabar audio del micrófono virtual (CABLE Output)
- */
 async function grabarAudio(duracionMs = 5000) {
   return new Promise((resolve, reject) => {
     const outputFile = path.join(__dirname, 'temp', 'input.wav');
     
-    // Crear carpeta temp si no existe
     if (!fs.existsSync(path.join(__dirname, 'temp'))) {
       fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
     }
@@ -62,7 +58,7 @@ async function grabarAudio(duracionMs = 5000) {
         const cmd2 = `ffmpeg -y -f wasapi -i audio_output_default -t ${duracionMs/1000} -acodec pcm_s16le -ar 16000 -ac 1 "${outputFile}"`;
         exec(cmd2, (err2) => {
           if (err2) {
-            console.log('⚠️ Error grabando, usando simulación');
+            console.log('⚠️ Error grabando');
             resolve(null);
           } else {
             resolve(outputFile);
@@ -75,15 +71,10 @@ async function grabarAudio(duracionMs = 5000) {
   });
 }
 
-/**
- * Reproducir audio por el altavoz virtual (CABLE Input)
- */
 async function reproducirAudio(archivoAudio) {
   return new Promise((resolve, reject) => {
     const cmd = `ffplay -autoexit -nodisp "${archivoAudio}"`;
-    
     console.log(`🔊 Reproduciendo audio...`);
-    
     exec(cmd, (error) => {
       if (error) {
         const psCmd = `powershell -c (New-Object Media.SoundPlayer "${archivoAudio}").PlaySync()`;
@@ -96,68 +87,36 @@ async function reproducirAudio(archivoAudio) {
 }
 
 // ========================================
-// FUNCIONES DE IA
+// GEMINI (GRATIS)
 // ========================================
 
-/**
- * Transcribir audio con OpenAI Whisper
- */
-async function transcribirAudio(archivoAudio) {
-  if (!archivoAudio || !fs.existsSync(archivoAudio)) {
-    return null;
-  }
-
-  console.log('📝 Transcribiendo con Whisper...');
-  
-  const audioBuffer = fs.readFileSync(archivoAudio);
-  const FormData = (await import('form-data')).default;
-  const form = new FormData();
-  form.append('file', audioBuffer, 'audio.wav');
-  form.append('model', 'whisper-1');
-  form.append('language', CONFIG.idioma);
-
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${CONFIG.openai_key}`,
-      ...form.getHeaders()
-    },
-    body: form
-  });
-
-  if (!response.ok) {
-    console.log('⚠️ Error en Whisper');
-    return null;
-  }
-
-  const data = await response.json();
-  console.log(`📝 Transcripción: "${data.text}"`);
-  return data.text;
-}
-
-/**
- * Generar respuesta con GPT-4
- */
-async function generarRespuesta(mensajeUsuario) {
+async function generarRespuestaGemini(mensajeUsuario) {
   historialConversacion.push({
     role: 'user',
     content: mensajeUsuario
   });
 
-  console.log('🤖 Generando respuesta con GPT-4...');
+  console.log('🤖 Generando respuesta con Gemini...');
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  // Construir historial para Gemini
+  const contents = [];
+  for (const msg of historialConversacion) {
+    contents.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    });
+  }
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.gemini_key}`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${CONFIG.openai_key}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: `Eres un agente telefónico de Enerlux, empresa de cambio de compañía eléctrica en España.
+      contents: contents,
+      systemInstruction: {
+        parts: [{
+          text: `Eres un agente telefónico de Enerlux, empresa de cambio de compañía eléctrica en España.
 
 Tu objetivo es convencer al cliente de cambiarse a Enerlux para ahorrar en su factura de luz.
 
@@ -176,21 +135,23 @@ INFORMACIÓN DE ENERLUX:
 - Precios congelados por 12 meses
 
 Responde SIEMPRE en español, de forma natural y conversacional.`
-        },
-        ...historialConversacion.slice(-10)
-      ],
-      max_tokens: 100
+        }]
+      },
+      generationConfig: {
+        maxOutputTokens: 100,
+        temperature: 0.7
+      }
     })
   });
 
   const data = await response.json();
   
-  if (!response.ok || !data.choices || !data.choices[0]) {
-    console.log('❌ Error OpenAI:', JSON.stringify(data));
+  if (!response.ok || !data.candidates || !data.candidates[0]) {
+    console.log('❌ Error Gemini:', JSON.stringify(data));
     return "Disculpe, podría repetir eso por favor?";
   }
-  
-  const respuesta = data.choices[0].message.content;
+
+  const respuesta = data.candidates[0].content.parts[0].text;
 
   historialConversacion.push({
     role: 'assistant',
@@ -201,56 +162,58 @@ Responde SIEMPRE en español, de forma natural y conversacional.`
   return respuesta;
 }
 
-/**
- * Convertir texto a voz con ElevenLabs
- */
-async function textoAVoz(texto) {
-  console.log('🔊 Convirtiendo a voz con ElevenLabs...');
+// ========================================
+// EDGE TTS (GRATIS - Microsoft)
+// ========================================
 
-  try {
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${CONFIG.elevenlabs_voice_id}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': CONFIG.elevenlabs_key
-      },
-      body: JSON.stringify({
-        text: texto,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.5,
-          use_speaker_boost: true
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log('⚠️ Error ElevenLabs:', response.status, errorText.substring(0, 200));
-      return null;
-    }
-
-  const audioBuffer = await response.buffer();
-  const outputFile = path.join(__dirname, 'temp', 'output.mp3');
+async function textoAVozEdge(texto) {
+  console.log('🔊 Convirtiendo a voz con Edge TTS (gratis)...');
   
   if (!fs.existsSync(path.join(__dirname, 'temp'))) {
     fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
   }
   
-  fs.writeFileSync(outputFile, audioBuffer);
+  const outputFile = path.join(__dirname, 'temp', 'output.mp3');
   
-  console.log(`✅ Audio generado: ${outputFile}`);
-  return outputFile;
-  } catch (error) {
-    console.log('⚠️ Error en ElevenLabs:', error.message);
-    return null;
-  }
+  // Edge TTS usa la voz de Microsoft en español
+  // Voz: es-ES-ElviraNeural (mujer española natural)
+  const cmd = `edge-tts --text "${texto.replace(/"/g, '\\"')}" --voice es-ES-ElviraNeural --write-media "${outputFile}"`;
+  
+  return new Promise((resolve, reject) => {
+    exec(cmd, (error) => {
+      if (error) {
+        console.log('⚠️ Error con Edge TTS, intentando alternativa...');
+        // Alternativa: usar PowerShell con SAPI
+        const psCmd = `powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.SelectVoice('Microsoft Helena'); $speak.Speak('${texto.replace(/'/g, "''")}')"`;
+        exec(psCmd, () => resolve(null));
+      } else {
+        console.log(`✅ Audio generado: ${outputFile}`);
+        resolve(outputFile);
+      }
+    });
+  });
+}
+
+// Alternativa con PowerShell SAPI (siempre disponible en Windows)
+async function textoAVozSAPI(texto) {
+  console.log('🔊 Usando voz de Windows (SAPI)...');
+  
+  // Escapar comillas para PowerShell
+  const textoEscapado = texto.replace(/'/g, "''").replace(/"/g, '\\"');
+  
+  return new Promise((resolve) => {
+    const psCmd = `powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak('${textoEscapado}')"`;
+    exec(psCmd, (error) => {
+      if (error) {
+        console.log('⚠️ Error con SAPI');
+      }
+      resolve(null);
+    });
+  });
 }
 
 // ========================================
-// MODO INTERACTIVO (para pruebas)
+// MODO INTERACTIVO
 // ========================================
 
 async function modoInteractivo() {
@@ -268,10 +231,22 @@ async function modoInteractivo() {
   console.log('🎮 ═══════════════════════════════════');
   console.log('');
 
+  // Verificar Gemini API key
+  if (!CONFIG.gemini_key) {
+    console.log('❌ ERROR: Falta GEMINI_API_KEY en el archivo .env');
+    console.log('   Crear API key gratis en: https://aistudio.google.com/app/apikey');
+    console.log('   Luego añadir al archivo .env:');
+    console.log('   GEMINI_API_KEY=tu_api_key_aqui');
+    console.log('');
+    rl.close();
+    return;
+  }
+
   const saludo = "Hola, le llamo de Enerlux. ¿Podría hablar un momento sobre su factura de luz?";
   console.log(`🗣️ IA: "${saludo}"`);
   
-  const audioSaludo = await textoAVoz(saludo);
+  // Generar audio del saludo
+  const audioSaludo = await textoAVozEdge(saludo);
   if (audioSaludo) {
     console.log(`🔊 Audio guardado en: ${audioSaludo}`);
   }
@@ -284,10 +259,15 @@ async function modoInteractivo() {
         return;
       }
 
-      const respuesta = await generarRespuesta(input);
+      if (!input.trim()) {
+        preguntar();
+        return;
+      }
+
+      const respuesta = await generarRespuestaGemini(input);
       console.log(`🗣️ IA: "${respuesta}"`);
 
-      const audio = await textoAVoz(respuesta);
+      const audio = await textoAVozEdge(respuesta);
       if (audio) {
         console.log(`🔊 Audio guardado en: ${audio}`);
       }
@@ -315,6 +295,11 @@ if (args.includes('--interactivo') || args.includes('-i')) {
   console.log('');
   console.log('  node server-local.js --interactivo  → Prueba escribiendo');
   console.log('  node server-local.js --llamar       → Con audio real (VB-CABLE)');
+  console.log('');
+  console.log('🔑 CONFIGURACIÓN:');
+  console.log('  Crear archivo .env con:');
+  console.log('  GEMINI_API_KEY=tu_api_key');
+  console.log('  (Obtener gratis en: https://aistudio.google.com/app/apikey)');
   console.log('');
   modoInteractivo();
 }
