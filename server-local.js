@@ -1,7 +1,7 @@
 /**
  * ENERLUX CALL CENTER IA - SERVIDOR LOCAL (VB-CABLE + ZADARMA)
  * Sistema de llamadas con IA - versión GRATUITA
- * Usa: Gemini (gratis) + Edge TTS (gratis)
+ * Usa: Groq (gratis, muy rápido) + Edge TTS (gratis)
  */
 
 import fetch from 'node-fetch';
@@ -22,8 +22,8 @@ let historialConversacion = [];
 
 // Configuración
 const CONFIG = {
-  gemini_key: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY,
-  use_edge_tts: true, // Edge TTS es gratis
+  groq_key: process.env.GROQ_API_KEY,
+  use_edge_tts: true,
   audio_input: 'CABLE Output (VB-Audio Virtual Cable)',
   audio_output: 'CABLE Input (VB-Audio Virtual Cable)',
   idioma: 'es'
@@ -31,92 +31,28 @@ const CONFIG = {
 
 console.log('📞 ENERLUX CALL CENTER IA - Servidor Local (GRATIS)');
 console.log('===================================================');
-console.log(`🔑 Gemini: ${CONFIG.gemini_key ? '✅ Configurado' : '❌ Falta API key'}`);
+console.log(`🔑 Groq: ${CONFIG.groq_key ? '✅ Configurado' : '❌ Falta API key'}`);
 console.log(`🔊 Voz: Edge TTS (Microsoft - Gratis)`);
 console.log(`🎧 Audio Input: ${CONFIG.audio_input}`);
 console.log(`🎧 Audio Output: ${CONFIG.audio_output}`);
 console.log('');
 
 // ========================================
-// FUNCIONES DE AUDIO
+// GROQ API (GRATIS - LLaMA/Mixtral)
 // ========================================
 
-async function grabarAudio(duracionMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const outputFile = path.join(__dirname, 'temp', 'input.wav');
-    
-    if (!fs.existsSync(path.join(__dirname, 'temp'))) {
-      fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
-    }
-
-    const cmd = `ffmpeg -y -f dshow -i audio="${CONFIG.audio_input}" -t ${duracionMs/1000} -acodec pcm_s16le -ar 16000 -ac 1 "${outputFile}"`;
-    
-    console.log(`🎤 Grabando audio por ${duracionMs/1000}s...`);
-    
-    exec(cmd, (error, stdout, stderr) => {
-      if (error && !fs.existsSync(outputFile)) {
-        const cmd2 = `ffmpeg -y -f wasapi -i audio_output_default -t ${duracionMs/1000} -acodec pcm_s16le -ar 16000 -ac 1 "${outputFile}"`;
-        exec(cmd2, (err2) => {
-          if (err2) {
-            console.log('⚠️ Error grabando');
-            resolve(null);
-          } else {
-            resolve(outputFile);
-          }
-        });
-      } else {
-        resolve(outputFile);
-      }
-    });
-  });
-}
-
-async function reproducirAudio(archivoAudio) {
-  return new Promise((resolve, reject) => {
-    const cmd = `ffplay -autoexit -nodisp "${archivoAudio}"`;
-    console.log(`🔊 Reproduciendo audio...`);
-    exec(cmd, (error) => {
-      if (error) {
-        const psCmd = `powershell -c (New-Object Media.SoundPlayer "${archivoAudio}").PlaySync()`;
-        exec(psCmd, () => resolve());
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-// ========================================
-// GEMINI (GRATIS)
-// ========================================
-
-async function generarRespuestaGemini(mensajeUsuario) {
+async function generarRespuestaGroq(mensajeUsuario) {
   historialConversacion.push({
     role: 'user',
     content: mensajeUsuario
   });
 
-  console.log('🤖 Generando respuesta con Gemini...');
+  console.log('🤖 Generando respuesta con Groq (LLaMA 3.1)...');
 
-  // Construir historial para Gemini
-  const contents = [];
-  for (const msg of historialConversacion) {
-    contents.push({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }]
-    });
-  }
-
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${CONFIG.gemini_key}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      contents: contents,
-      systemInstruction: {
-        parts: [{
-          text: `Eres un agente telefónico de Enerlux, empresa de cambio de compañía eléctrica en España.
+  const messages = [
+    {
+      role: 'system',
+      content: `Eres un agente telefónico de Enerlux, empresa de cambio de compañía eléctrica en España.
 
 Tu objetivo es convencer al cliente de cambiarse a Enerlux para ahorrar en su factura de luz.
 
@@ -135,31 +71,45 @@ INFORMACIÓN DE ENERLUX:
 - Precios congelados por 12 meses
 
 Responde SIEMPRE en español, de forma natural y conversacional.`
-        }]
-      },
-      generationConfig: {
-        maxOutputTokens: 100,
-        temperature: 0.7
-      }
-    })
-  });
+    },
+    ...historialConversacion
+  ];
 
-  const data = await response.json();
-  
-  if (!response.ok || !data.candidates || !data.candidates[0]) {
-    console.log('❌ Error Gemini:', JSON.stringify(data));
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CONFIG.groq_key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: messages,
+        max_tokens: 100,
+        temperature: 0.7
+      })
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      console.log('❌ Error Groq:', JSON.stringify(data));
+      return "Disculpe, podría repetir eso por favor?";
+    }
+
+    const respuesta = data.choices[0].message.content;
+
+    historialConversacion.push({
+      role: 'assistant',
+      content: respuesta
+    });
+
+    console.log(`🤖 Respuesta: "${respuesta}"`);
+    return respuesta;
+  } catch (error) {
+    console.log('❌ Error:', error.message);
     return "Disculpe, podría repetir eso por favor?";
   }
-
-  const respuesta = data.candidates[0].content.parts[0].text;
-
-  historialConversacion.push({
-    role: 'assistant',
-    content: respuesta
-  });
-
-  console.log(`🤖 Respuesta: "${respuesta}"`);
-  return respuesta;
 }
 
 // ========================================
@@ -167,25 +117,21 @@ Responde SIEMPRE en español, de forma natural y conversacional.`
 // ========================================
 
 async function textoAVozEdge(texto) {
-  console.log('🔊 Convirtiendo a voz con Edge TTS (gratis)...');
+  console.log('🔊 Convirtiendo a voz con Edge TTS...');
   
   if (!fs.existsSync(path.join(__dirname, 'temp'))) {
     fs.mkdirSync(path.join(__dirname, 'temp'), { recursive: true });
   }
   
   const outputFile = path.join(__dirname, 'temp', 'output.mp3');
-  
-  // Edge TTS usa la voz de Microsoft en español
-  // Voz: es-ES-ElviraNeural (mujer española natural)
   const cmd = `edge-tts --text "${texto.replace(/"/g, '\\"')}" --voice es-ES-ElviraNeural --write-media "${outputFile}"`;
   
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     exec(cmd, (error) => {
       if (error) {
-        console.log('⚠️ Error con Edge TTS, intentando alternativa...');
-        // Alternativa: usar PowerShell con SAPI
-        const psCmd = `powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.SelectVoice('Microsoft Helena'); $speak.Speak('${texto.replace(/'/g, "''")}')"`;
-        exec(psCmd, () => resolve(null));
+        console.log('⚠️ Error Edge TTS, fallback a reproducir directo...');
+        // Reproducir sin guardar archivo
+        exec(`edge-tts --text "${texto.replace(/"/g, '\\"')}" --voice es-ES-ElviraNeural | ffplay -autoexit -nodisp -i pipe:0`, () => resolve(null));
       } else {
         console.log(`✅ Audio generado: ${outputFile}`);
         resolve(outputFile);
@@ -194,21 +140,11 @@ async function textoAVozEdge(texto) {
   });
 }
 
-// Alternativa con PowerShell SAPI (siempre disponible en Windows)
+// Alternativa con SAPI (Windows)
 async function textoAVozSAPI(texto) {
-  console.log('🔊 Usando voz de Windows (SAPI)...');
-  
-  // Escapar comillas para PowerShell
-  const textoEscapado = texto.replace(/'/g, "''").replace(/"/g, '\\"');
-  
+  const textoEscapado = texto.replace(/'/g, "''");
   return new Promise((resolve) => {
-    const psCmd = `powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak('${textoEscapado}')"`;
-    exec(psCmd, (error) => {
-      if (error) {
-        console.log('⚠️ Error con SAPI');
-      }
-      resolve(null);
-    });
+    exec(`powershell -Command "Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak('${textoEscapado}')"`, () => resolve());
   });
 }
 
@@ -225,18 +161,15 @@ async function modoInteractivo() {
 
   console.log('');
   console.log('🎮 ═══════════════════════════════════');
-  console.log('🎮 MODO INTERACTIVO (pruebas sin audio)');
+  console.log('🎮 MODO INTERACTIVO');
   console.log('🎮 Escribe lo que diría el cliente');
   console.log('🎮 Escribe "salir" para terminar');
   console.log('🎮 ═══════════════════════════════════');
   console.log('');
 
-  // Verificar Gemini API key
-  if (!CONFIG.gemini_key) {
-    console.log('❌ ERROR: Falta GEMINI_API_KEY en el archivo .env');
-    console.log('   Crear API key gratis en: https://aistudio.google.com/app/apikey');
-    console.log('   Luego añadir al archivo .env:');
-    console.log('   GEMINI_API_KEY=tu_api_key_aqui');
+  if (!CONFIG.groq_key) {
+    console.log('❌ ERROR: Falta GROQ_API_KEY en el archivo .env');
+    console.log('   Crear API key gratis en: https://console.groq.com');
     console.log('');
     rl.close();
     return;
@@ -245,7 +178,6 @@ async function modoInteractivo() {
   const saludo = "Hola, le llamo de Enerlux. ¿Podría hablar un momento sobre su factura de luz?";
   console.log(`🗣️ IA: "${saludo}"`);
   
-  // Generar audio del saludo
   const audioSaludo = await textoAVozEdge(saludo);
   if (audioSaludo) {
     console.log(`🔊 Audio guardado en: ${audioSaludo}`);
@@ -264,7 +196,7 @@ async function modoInteractivo() {
         return;
       }
 
-      const respuesta = await generarRespuestaGemini(input);
+      const respuesta = await generarRespuestaGroq(input);
       console.log(`🗣️ IA: "${respuesta}"`);
 
       const audio = await textoAVozEdge(respuesta);
@@ -288,18 +220,11 @@ if (args.includes('--interactivo') || args.includes('-i')) {
   modoInteractivo();
 } else if (args.includes('--llamar') || args.includes('-l')) {
   console.log('📞 Modo llamada con audio real');
-  console.log('⚠️ Asegúrate de que Zadarma está conectado');
   modoInteractivo();
 } else {
   console.log('📝 USO:');
-  console.log('');
   console.log('  node server-local.js --interactivo  → Prueba escribiendo');
-  console.log('  node server-local.js --llamar       → Con audio real (VB-CABLE)');
-  console.log('');
-  console.log('🔑 CONFIGURACIÓN:');
-  console.log('  Crear archivo .env con:');
-  console.log('  GEMINI_API_KEY=tu_api_key');
-  console.log('  (Obtener gratis en: https://aistudio.google.com/app/apikey)');
+  console.log('  node server-local.js --llamar       → Con audio real');
   console.log('');
   modoInteractivo();
 }
