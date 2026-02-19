@@ -139,8 +139,12 @@ function mostrarCliente(cliente) {
 function generarPromptCliente(cliente) {
   if (!cliente) return '';
   
+  // Extraer solo el primer nombre
+  const primerNombre = cliente.nombre ? cliente.nombre.split(' ')[0] : '';
+  
   const datos = [];
-  if (cliente.nombre) datos.push(`NOMBRE: ${cliente.nombre}`);
+  if (cliente.nombre) datos.push(`NOMBRE COMPLETO: ${cliente.nombre}`);
+  if (primerNombre) datos.push(`PRIMER NOMBRE: ${primerNombre} (úSALO para dirigirte al cliente)`);
   if (cliente.direccion || cliente.dirección) datos.push(`DIRECCIÓN: ${cliente.direccion || cliente.dirección}`);
   if (cliente.codigo_postal || cliente.codigopostal || cliente.cp) datos.push(`CÓDIGO POSTAL: ${cliente.codigo_postal || cliente.codigopostal || cliente.cp}`);
   if (cliente.telefono || cliente.tel) datos.push(`TELÉFONO: ${cliente.telefono || cliente.tel}`);
@@ -294,7 +298,9 @@ async function modoInteractivo() {
   // Mostrar datos del cliente si hay
   if (clienteActual) {
     mostrarCliente(clienteActual);
-    const saludo = `Hola, buenos días. ¿Hablo con ${clienteActual.nombre || 'usted'}? Le llamo del Departamento de Incidencias de Enerlux Soluciones por su suministro en ${clienteActual.direccion || clienteActual.dirección || 'su dirección'}.`;
+    // Usar solo el primer nombre
+    const primerNombre = (clienteActual.nombre || 'usted').split(' ')[0];
+    const saludo = `Hola, buenos días. ¿Hablo con ${primerNombre}? Le llamo del Departamento de Incidencias de Enerlux Soluciones por su suministro en ${clienteActual.direccion || clienteActual.dirección || 'su dirección'}.`;
     console.log(`🗣️ IA: "${saludo}"`);
     const audioSaludo = await textoAVozEdge(saludo);
     if (audioSaludo) console.log(`🔊 Audio guardado en: ${audioSaludo}`);
