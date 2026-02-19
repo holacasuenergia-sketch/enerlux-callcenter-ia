@@ -1,0 +1,6 @@
+id,dni,nombre,telefono,email,direccion,codigo_postal
+1,12345678A,Sonia Cenador Prieto,+34610243061,sonia@email.com,Calle Principal 123,28001
+2,87654321B,Miguel Ángel Torres,+34612345678,miguel@email.com,Avenida Central 45,28002
+3,11223344C,Ana María López,+34698765432,ana@email.com,Plaza Mayor 8,28003
+4,55667788D,Carlos Fernández,+34611122233,carlos@email.com,Calle Norte 56,28004
+5,99887766E,Laura Martínez,+34644455566,laura@email.com,Paseo Sur 12,28005
