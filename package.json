@@ -2,10 +2,11 @@
   "name": "enerlux-callcenter-ia",
   "version": "1.0.0",
   "description": "Sistema de llamadas IA para Enerlux - Captación de clientes",
-  "main": "server.js",
+  "main": "server-twilio.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node server-twilio.js",
+    "start-local": "node server.js",
+    "dev": "node server-twilio.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -16,8 +17,7 @@
     "ws": "^8.14.2",
     "elevenlabs-node": "^2.0.0",
     "firebase-admin": "^11.11.0",
-    "wav": "^1.0.2",
-    "speaker": "^0.5.4",
-    "mic": "^2.1.2"
+    "twilio": "^4.19.0",
+    "wav": "^1.0.2"
   }
 }
