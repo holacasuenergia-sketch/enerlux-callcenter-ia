@@ -191,7 +191,7 @@ async function modoInteractivo() {
     return;
   }
 
-  const saludo = "Hola, le llamo de Enerlux. ¿Podría hablar un momento sobre su factura de luz?";
+  const saludo = "Hola, buenos días. Le llamo del Departamento de Incidencias de Enerlux Soluciones. ¿Podría hablar un momento sobre su suministro de luz?";
   console.log(`🗣️ IA: "${saludo}"`);
   
   const audioSaludo = await textoAVozEdge(saludo);
