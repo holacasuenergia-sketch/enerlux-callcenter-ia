@@ -42,11 +42,35 @@ console.log('');
 // LEER CSV DE CLIENTES
 // ========================================
 
+// Parser CSV que maneja comillas correctamente
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  
+  return result;
+}
+
 function parseCSV(csvPath) {
   const content = fs.readFileSync(csvPath, 'utf-8');
   const lines = content.trim().split('\n');
   
   const clientes = [];
+  let headerFound = false;
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -63,27 +87,29 @@ function parseCSV(csvPath) {
       continue;
     }
     
-    // Formato CSV con comas: ID, DNI, NOMBRE, TELEFONO, EMAIL, DIRECCION, CP
-    const values = line.split(',').map(v => v.trim());
+    // Formato CSV con comas (maneja comillas)
+    const values = parseCSVLine(line);
     
     if (values.length >= 4) {
       // Detectar si la primera línea es header
       if (values[0].toLowerCase().includes('id') || 
-          values[0].toLowerCase().includes('nombre') ||
-          values.some(v => v.toLowerCase().includes('telefono'))) {
+          values[1].toLowerCase().includes('dni') ||
+          values.some(v => v.toLowerCase().includes('telefono') || v.toLowerCase().includes('phone'))) {
+        headerFound = true;
         continue;
       }
       
       const cliente = {
         id: values[0] || '',
-        dni: values[1] || '',
+        dni: (values[1] || '').replace(/\s+/g, '').toUpperCase(), // Limpiar DNI
         nombre: values[2] || '',
-        telefono: values[3] || '',
-        email: values[4] || '',
+        telefono: (values[3] || '').replace(/\s+/g, ''), // Limpiar teléfono
+        email: (values[4] || '').trim().toUpperCase(),
         direccion: values[5] || '',
         codigo_postal: values[6] || ''
       };
       
+      // Validar que tenga nombre o teléfono
       if (cliente.nombre || cliente.telefono) {
         clientes.push(cliente);
       }
@@ -348,7 +374,17 @@ async function modoCSV(csvPath) {
     
     if (idx >= 0 && idx < clientes.length) {
       clienteActual = clientes[idx];
-      console.log(`\n📞 Llamando a: ${clienteActual.nombre} (${clienteActual.telefono})`);
+      console.log('\n📞 ═══════════════════════════════════');
+      console.log('📞 CLIENTE SELECCIONADO:');
+      console.log('📞 ═══════════════════════════════════');
+      console.log(`📞 ID:           ${clienteActual.id}`);
+      console.log(`📞 DNI:          ${clienteActual.dni || 'N/A'}`);
+      console.log(`📞 Nombre:       ${clienteActual.nombre}`);
+      console.log(`📞 Teléfono:     ${clienteActual.telefono}`);
+      console.log(`📞 Email:        ${clienteActual.email || 'N/A'}`);
+      console.log(`📞 Dirección:    ${clienteActual.direccion || 'N/A'}`);
+      console.log(`📞 CP:           ${clienteActual.codigo_postal || 'N/A'}`);
+      console.log('📞 ═══════════════════════════════════\n');
       rl.close();
       modoInteractivo();
     } else {
