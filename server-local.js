@@ -184,6 +184,12 @@ Responde SIEMPRE en español, de forma natural y conversacional.`
   });
 
   const data = await response.json();
+  
+  if (!response.ok || !data.choices || !data.choices[0]) {
+    console.log('❌ Error OpenAI:', JSON.stringify(data));
+    return "Disculpe, podría repetir eso por favor?";
+  }
+  
   const respuesta = data.choices[0].message.content;
 
   historialConversacion.push({
@@ -201,28 +207,30 @@ Responde SIEMPRE en español, de forma natural y conversacional.`
 async function textoAVoz(texto) {
   console.log('🔊 Convirtiendo a voz con ElevenLabs...');
 
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${CONFIG.elevenlabs_voice_id}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': CONFIG.elevenlabs_key
-    },
-    body: JSON.stringify({
-      text: texto,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.5,
-        use_speaker_boost: true
-      }
-    })
-  });
+  try {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${CONFIG.elevenlabs_voice_id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': CONFIG.elevenlabs_key
+      },
+      body: JSON.stringify({
+        text: texto,
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.5,
+          use_speaker_boost: true
+        }
+      })
+    });
 
-  if (!response.ok) {
-    console.log('⚠️ Error en ElevenLabs');
-    return null;
-  }
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log('⚠️ Error ElevenLabs:', response.status, errorText.substring(0, 200));
+      return null;
+    }
 
   const audioBuffer = await response.buffer();
   const outputFile = path.join(__dirname, 'temp', 'output.mp3');
@@ -235,6 +243,10 @@ async function textoAVoz(texto) {
   
   console.log(`✅ Audio generado: ${outputFile}`);
   return outputFile;
+  } catch (error) {
+    console.log('⚠️ Error en ElevenLabs:', error.message);
+    return null;
+  }
 }
 
 // ========================================
