@@ -46,39 +46,34 @@ function parseCSV(csvPath) {
   const content = fs.readFileSync(csvPath, 'utf-8');
   const lines = content.trim().split('\n');
   
-  // Detectar formato del CSV
-  const firstLine = lines[0].split(',').map(v => v.trim());
-  
-  // Si la primera línea tiene encabezados conocidos
-  const tieneHeaders = firstLine.some(h => 
-    h.toLowerCase().includes('nombre') || 
-    h.toLowerCase().includes('telefono') ||
-    h.toLowerCase().includes('dni')
-  );
-  
-  let startLine = 0;
-  
-  // Si tiene encabezados, saltar la primera línea
-  if (tieneHeaders) {
-    startLine = 1;
-  }
-  
-  // Si la primera línea es un número (contador), saltarla
-  if (!isNaN(firstLine[0]) && firstLine.length === 1) {
-    startLine = 1;
-  }
-  
   const clientes = [];
   
-  for (let i = startLine; i < lines.length; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
     
+    // Formato simple: "1465. JOSE TADEO HIDALGO LOPEZ - +34619739311"
+    const matchSimple = line.match(/^(\d+)\.\s*(.+?)\s*-\s*(\+?\d+)$/);
+    if (matchSimple) {
+      clientes.push({
+        id: matchSimple[1],
+        nombre: matchSimple[2].trim(),
+        telefono: matchSimple[3].trim()
+      });
+      continue;
+    }
+    
+    // Formato CSV con comas: ID, DNI, NOMBRE, TELEFONO, EMAIL, DIRECCION, CP
     const values = line.split(',').map(v => v.trim());
     
-    // Formato Enerlux: ID, DNI, NOMBRE, TELEFONO, EMAIL, DIRECCION, CODIGO_POSTAL
-    // (sin IBAN)
-    if (values.length >= 5) {
+    if (values.length >= 4) {
+      // Detectar si la primera línea es header
+      if (values[0].toLowerCase().includes('id') || 
+          values[0].toLowerCase().includes('nombre') ||
+          values.some(v => v.toLowerCase().includes('telefono'))) {
+        continue;
+      }
+      
       const cliente = {
         id: values[0] || '',
         dni: values[1] || '',
@@ -88,9 +83,6 @@ function parseCSV(csvPath) {
         direccion: values[5] || '',
         codigo_postal: values[6] || ''
       };
-      
-      // Ignorar líneas que son solo encabezados
-      if (cliente.nombre.toLowerCase().includes('nombre')) continue;
       
       if (cliente.nombre || cliente.telefono) {
         clientes.push(cliente);
@@ -151,45 +143,31 @@ async function generarRespuestaGroq(mensajeUsuario) {
 
   console.log('🤖 Generando respuesta con Groq (LLaMA 3.1)...');
 
-  const systemPrompt = `Eres un agente telefónico de Enerlux Soluciones, una ASESORÍA ENERGÉTICA en España.
+  const systemPrompt = `Eres José, agente telefónico de Enerlux Soluciones, una ASESORÍA ENERGÉTICA en España.
 
-IMPORTANTE: Enerlux NO es una comercializadora. Es una asesoria que evalúa las distintas compañías (Endesa, Naturgy, Iberdrola, Gana Energía, etc.) y encuentra el mejor precio para el cliente según su zona.
-
-TU NOMBRE: José (usalo para presentarte)
+IMPORTANTE: 
+- Enerlux NO es comercializadora, es ASESORÍA que evalúa compañías (Endesa, Naturgy, Iberdrola, Gana Energía) y encuentra el mejor precio
+- NUNCA recites el speech, HABLA de forma natural como un humano real
+- USA los datos del cliente si están disponibles
 ${generarPromptCliente(clienteActual)}
 
-SPEECH OFICIAL (síguelo pero de forma natural):
+FLUJO DE LLAMADA (síguelo de forma natural, NO lo recites):
 
-1. SALUDO INICIAL:
-"Hola, buenos días/tardes, ¿hablo con [Nombre]? Encantado, mi nombre es José. Le llamo del Departamento de Incidencias por su punto de suministro de luz en [Dirección]. ¿Es usted el titular?"
-
-2. GANCHO - SOBRECOSTE:
-"Le llamamos porque hemos detectado que su suministro está arrastrando un 36% de sobrecoste heredado de la facturación del año pasado. ¿Cuánto le ha estado llegando en su factura?"
-
-3. PREGUNTAR COMPAÑÍA ACTUAL:
-"¿Actualmente con qué compañía se encuentra?"
-
-4. OFERTA POR ZONA:
-"Correcto, por código postal [CÓDIGO POSTAL] de su zona, hemos evaluado las compañías disponibles (Endesa, Naturgy, Iberdrola, Gana Energía) y le brindamos el mejor precio: 0,10€/kWh. Vamos a corregir esta incidencia y bajarle el precio de los 0,15€ que tiene ahora. Así deja de pagar ese 36% de más."
-
-5. CONFIRMACIÓN DE DATOS:
-"Es un minuto para dejarlo listo. No le pediré datos ya que nos corresponde saberlo por la compañía."
-Confirmar: Nombre completo, correo, teléfono, dirección, IBAN (últimos 4 dígitos), DNI (últimos 2 dígitos).
-Preguntar: "¿Desea su facturación en papel o por email?"
-
-6. CIERRE:
-"De acuerdo. Ahora tenga su DNI o NIE a mano porque vamos a formalizarlo. Le va a llegar un WhatsApp con los pasos y el contrato al email con la actualización al precio de 0,10€. Queda activa desde hoy y ya le deja de venir ese recargo."
-
-7. DESPEDIDA:
-"Muchas gracias por confiar en Enerlux Soluciones. Desde hoy soy José, tu asesor asignado. Enhorabuena: ya estás pagando lo correcto y aprovechando tu descuento."
+1. Saluda por su nombre (si lo tienes), preséntate como José del Dept. de Incidencias, pregunta si es titular
+2. Menciona el 36% de sobrecoste detectado, pregunta cuánto paga de factura
+3. Pregunta con qué compañía está
+4. Ofrece el mejor precio (0,10€/kWh) evaluando las compañías de su zona
+5. Confirma sus datos (los que tengas), pregunta papel o email
+6. Cierra: el cambio se formaliza, recibirá WhatsApp con pasos + email con contrato, la factura se actualiza en 72 horas
+7. Despídete como José, su asesor asignado
 
 REGLAS:
-- Responde BREVE (máximo 2-3 frases)
-- Enerlux es ASESORÍA, no comercializadora - evaluamos compañías para encontrar el mejor precio
-- Si el cliente pregunta por datos personales, confirma los que ya tienes
-- Si el cliente está interesado, pasa a confirmar datos
-- Si el cliente rechaza, pregunta si conoce a alguien interesado
-- Siempre en español, natural y conversacional`;
+- Responde BREVE, como en una llamada real (máximo 2-3 frases)
+- NUNCA digas "1. SALUDO INICIAL" o recites el speech textual
+- HABLA naturalmente, usa "tú" o "usted" según el tono del cliente
+- Si el cliente ya aceptó, ve directo a cerrar
+- Si rechaza, pregunta si conoce a alguien interesado
+- Cuando preguntes datos, confirma los que YA tienes (ej: "su email es... ¿correcto?")`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -332,8 +310,15 @@ async function modoInteractivo() {
 // ========================================
 
 async function modoCSV(csvPath) {
+  const readline = await import('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
   if (!fs.existsSync(csvPath)) {
     console.log(`❌ ERROR: No existe el archivo ${csvPath}`);
+    rl.close();
     return;
   }
 
@@ -342,16 +327,35 @@ async function modoCSV(csvPath) {
 
   if (clientes.length === 0) {
     console.log('❌ No se encontraron clientes en el CSV');
+    rl.close();
     return;
   }
 
-  console.log('📋 Lista de clientes:');
+  // Mostrar lista de clientes
+  console.log('📋 ═══════════════════════════════════');
+  console.log('📋 CLIENTES DISPONIBLES:');
+  console.log('📋 ═══════════════════════════════════');
   clientes.forEach((c, i) => {
-    console.log(`  ${i + 1}. ${c.nombre || 'Sin nombre'} - ${c.telefono || c.tel || 'Sin teléfono'}`);
+    const nombre = c.nombre || 'Sin nombre';
+    const tel = c.telefono || c.tel || 'Sin teléfono';
+    console.log(`📋 ${String(i + 1).padStart(3)}. ${nombre.padEnd(35)} ${tel}`);
   });
-  console.log('');
+  console.log('📋 ═══════════════════════════════════\n');
 
-  modoInteractivo();
+  // Preguntar qué cliente llamar
+  rl.question('📞 Número de cliente a llamar (o "todos" para lista completa): ', async (respuesta) => {
+    const idx = parseInt(respuesta) - 1;
+    
+    if (idx >= 0 && idx < clientes.length) {
+      clienteActual = clientes[idx];
+      console.log(`\n📞 Llamando a: ${clienteActual.nombre} (${clienteActual.telefono})`);
+      rl.close();
+      modoInteractivo();
+    } else {
+      console.log('❌ Selección inválida');
+      rl.close();
+    }
+  });
 }
 
 // ========================================
