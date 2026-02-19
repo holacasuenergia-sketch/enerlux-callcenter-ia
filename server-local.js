@@ -304,11 +304,21 @@ async function modoInteractivo() {
     const primerNombre = (clienteActual.nombre || 'usted').split(' ')[0];
     const saludo = `Hola, buenos días. ¿Hablo con ${primerNombre}? Le llamo del Departamento de Incidencias de Enerlux Soluciones por su suministro en ${clienteActual.direccion || clienteActual.dirección || 'su dirección'}.`;
     console.log(`🗣️ IA: "${saludo}"`);
+    // Añadir saludo al historial para que la IA sepa que ya lo dijo
+    historialConversacion.push({
+      role: 'assistant',
+      content: saludo
+    });
     const audioSaludo = await textoAVozEdge(saludo);
     if (audioSaludo) console.log(`🔊 Audio guardado en: ${audioSaludo}`);
   } else {
     const saludo = "Hola, buenos días. Le llamo del Departamento de Incidencias de Enerlux Soluciones. ¿Podría hablar un momento sobre su suministro de luz?";
     console.log(`🗣️ IA: "${saludo}"`);
+    // Añadir saludo al historial
+    historialConversacion.push({
+      role: 'assistant',
+      content: saludo
+    });
     const audioSaludo = await textoAVozEdge(saludo);
     if (audioSaludo) console.log(`🔊 Audio guardado en: ${audioSaludo}`);
   }
