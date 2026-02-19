@@ -45,17 +45,56 @@ console.log('');
 function parseCSV(csvPath) {
   const content = fs.readFileSync(csvPath, 'utf-8');
   const lines = content.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  
+  // Detectar formato del CSV
+  const firstLine = lines[0].split(',').map(v => v.trim());
+  
+  // Si la primera línea tiene encabezados conocidos
+  const tieneHeaders = firstLine.some(h => 
+    h.toLowerCase().includes('nombre') || 
+    h.toLowerCase().includes('telefono') ||
+    h.toLowerCase().includes('dni')
+  );
+  
+  let startLine = 0;
+  
+  // Si tiene encabezados, saltar la primera línea
+  if (tieneHeaders) {
+    startLine = 1;
+  }
+  
+  // Si la primera línea es un número (contador), saltarla
+  if (!isNaN(firstLine[0]) && firstLine.length === 1) {
+    startLine = 1;
+  }
   
   const clientes = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
-    const cliente = {};
-    headers.forEach((header, idx) => {
-      cliente[header] = values[idx] || '';
-    });
-    if (cliente.nombre || cliente.telefono) {
-      clientes.push(cliente);
+  
+  for (let i = startLine; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    
+    const values = line.split(',').map(v => v.trim());
+    
+    // Formato Enerlux: ID, DNI, NOMBRE, TELEFONO, EMAIL, DIRECCION, CODIGO_POSTAL
+    // (sin IBAN)
+    if (values.length >= 5) {
+      const cliente = {
+        id: values[0] || '',
+        dni: values[1] || '',
+        nombre: values[2] || '',
+        telefono: values[3] || '',
+        email: values[4] || '',
+        direccion: values[5] || '',
+        codigo_postal: values[6] || ''
+      };
+      
+      // Ignorar líneas que son solo encabezados
+      if (cliente.nombre.toLowerCase().includes('nombre')) continue;
+      
+      if (cliente.nombre || cliente.telefono) {
+        clientes.push(cliente);
+      }
     }
   }
   
@@ -70,8 +109,12 @@ function mostrarCliente(cliente) {
   console.log(`📋 Código Postal: ${cliente.codigo_postal || cliente.codigopostal || cliente.cp || 'N/A'}`);
   console.log(`📋 Teléfono: ${cliente.telefono || cliente.tel || 'N/A'}`);
   console.log(`📋 Email: ${cliente.email || cliente.mail || cliente.correo || 'N/A'}`);
-  console.log(`📋 IBAN: ${cliente.iban ? cliente.iban.slice(-4).padStart(cliente.iban.length, '*') : 'N/A'}`);
-  console.log(`📋 DNI: ${cliente.dni ? cliente.dni.slice(-2).padStart(cliente.dni.length, '*') : 'N/A'}`);
+  if (cliente.iban) {
+    console.log(`📋 IBAN: ****${cliente.iban.slice(-4)}`);
+  }
+  if (cliente.dni) {
+    console.log(`📋 DNI: ******${cliente.dni.slice(-2)}`);
+  }
   console.log('📋 ═══════════════════════════════════\n');
 }
 
@@ -84,8 +127,13 @@ function generarPromptCliente(cliente) {
   if (cliente.codigo_postal || cliente.codigopostal || cliente.cp) datos.push(`CÓDIGO POSTAL: ${cliente.codigo_postal || cliente.codigopostal || cliente.cp}`);
   if (cliente.telefono || cliente.tel) datos.push(`TELÉFONO: ${cliente.telefono || cliente.tel}`);
   if (cliente.email || cliente.mail || cliente.correo) datos.push(`EMAIL: ${cliente.email || cliente.mail || cliente.correo}`);
-  if (cliente.iban) datos.push(`IBAN: ****${cliente.iban.slice(-4)}`);
+  if (cliente.iban) datos.push(`IBAN: ****${cliente.iban.slice(-4)} (pedírselo al cliente para confirmar)`);
   if (cliente.dni) datos.push(`DNI: ******${cliente.dni.slice(-2)}`);
+  
+  // Nota si falta IBAN
+  if (!cliente.iban) {
+    datos.push(`IBAN: (pedir al cliente durante la llamada)`);
+  }
   
   return `\n\nDATOS DEL CLIENTE ACTUAL (úsalos en la conversación):
 ${datos.join('\n')}`;
